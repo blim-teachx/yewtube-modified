@@ -6,7 +6,40 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 import yt_dlp
+import itertools
 from youtubesearchpython import VideosSearch, ChannelsSearch, PlaylistsSearch, Suggestions, Playlist, playlist_from_channel_id, Comments, Video, Channel, ChannelSearch
+
+# Patch for httpx proxies issue in youtubesearchpython library
+import httpx
+from youtubesearchpython.core.requests import RequestCore
+from youtubesearchpython.core.constants import userAgent
+import types
+
+def patched_sync_post(self):
+    client = httpx.Client(proxies=getattr(self, 'proxy', {}), timeout=getattr(self, 'timeout', 2))
+    try:
+        return client.post(
+            self.url,
+            headers={"User-Agent": userAgent},
+            json=getattr(self, 'data', {})
+        )
+    finally:
+        client.close()
+
+RequestCore.syncPostRequest = patched_sync_post
+
+def patched_sync_get(self):
+    client = httpx.Client(proxies=getattr(self, 'proxy', {}), timeout=getattr(self, 'timeout', 2))
+    try:
+        return client.get(
+            self.url,
+            headers={"User-Agent": userAgent},
+            cookies={'CONSENT': 'YES+1'}
+        )
+    finally:
+        client.close()
+
+RequestCore.syncGetRequest = patched_sync_get
 
 
 class MyLogger:
@@ -133,8 +166,37 @@ def search_videos_from_channel(channel_id, query):
     return search.result()
 
 def get_comments(video_id):
-    comments = Comments.get(video_id)
-    return comments['result']
+    '''Fetch limited (50) comments using yt_dlp YoutubeIE extractor to avoid long fetch times for videos with many comments.'''
+
+    from yt_dlp.extractor.youtube import YoutubeIE
+    import itertools
+    ydl = yt_dlp.YoutubeDL({'quiet': True})
+    ie = YoutubeIE(ydl)
+    url = f'https://www.youtube.com/watch?v={video_id}'
+    try:
+        webpage = ie._download_webpage(url, video_id)
+        ytcfg = ie.extract_ytcfg(video_id, webpage)
+        video_data_text = ie._search_regex(r'window\\[\"ytInitialPlayerResponse\\\"\\]\\s*=\\s*(\\{(?:[^{}]|{[^{}]*})*\\});', webpage, 'video data', default='{}')
+        video_data = json.loads(video_data_text)
+        contents = video_data.get('contents', {}).get('twoColumnWatchNextResults', {}).get('results', {}).get('results', {}).get('contents', [{}])[0].get('videoPrimaryInfoRenderer', {})
+    except Exception as e:
+        util.dbg(f'Error extracting data for comments: {e}')
+        return {'result': []}
+    try:
+        comments_iter = ie._get_comments(ytcfg, video_id, contents, webpage)
+        comments_raw = list(itertools.islice(comments_iter, 50))
+    except Exception as e:
+        util.dbg(f'Error fetching comments: {e}')
+        comments_raw = []
+    formatted_comments = []
+    for com in comments_raw:
+        formatted = {
+            'author': {'name': com.get('author', 'Unknown')},
+            'published': com.get('published_time', com.get('timestamp', 'Unknown')),
+            'content': com.get('text', com.get('message', ''))
+        }
+        formatted_comments.append(formatted)
+    return {'result': formatted_comments}
 
 def get_video_info(video_id):
     try:
