@@ -1,0 +1,22 @@
+*.py[cod]
+otherstuff/
+pafy
+vi.py
+MANIFEST
+.dev
+.vscode
+# Packages
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+bin
+var
+tags
+.env
+env/
+.idea/
+venv/
+test.py
