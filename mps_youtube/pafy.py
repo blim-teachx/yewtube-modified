@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlparse
 import requests
 import yt_dlp
 from youtubesearchpython import VideosSearch, ChannelsSearch, PlaylistsSearch, Suggestions, Playlist, playlist_from_channel_id, Comments, Video, Channel, ChannelSearch
-
+import time
 
 class MyLogger:
 
@@ -33,6 +33,67 @@ class MyLogger:
         print(msg)
 
 
+class PafyStream:
+    def __init__(self, format_dict):
+        self._format = format_dict
+        self.url = format_dict.get('url', '')
+        self.extension = format_dict.get('ext', 'mp4')
+        vcodec = format_dict.get('vcodec')
+        acodec = format_dict.get('acodec')
+        height = format_dict.get('height')
+        width = format_dict.get('width')
+        fps = format_dict.get('fps')
+        if vcodec == 'none':
+            self.mediatype = 'audio'
+            self.resolution = 'audio only'
+            abr = format_dict.get('abr', 0)
+            self.quality = f"{abr}kbps" if abr else 'unknown'
+        else:
+            self.mediatype = 'video' if acodec == 'none' else 'na'
+            self.resolution = f"{width or 0}x{height or 0}"
+            self.quality = format_dict.get('format_note', f"{height or 0}p")
+        self.notes = f"{fps}fps" if fps else ''
+        self.threed = '3d' in self.notes.lower() or 'stereo' in self.resolution.lower()
+        self.acodec = acodec
+        self.vcodec = vcodec
+        self.bitrate = format_dict.get('abr', format_dict.get('vbr', -1))
+        self.filesize = self.get_filesize()
+
+    def get_filesize(self):
+        fs = self._format.get('filesize')
+        if fs is not None:
+            return fs
+        fs = self._format.get('filesize_approx')
+        return fs or 0
+
+
+class Pafy:
+    def __init__(self, info_dict, ytid):
+        self._info = info_dict
+        self.title = info_dict.get('title', 'Unknown')
+        self.author = info_dict.get('uploader', 'Unknown')
+        self.length = info_dict.get('duration', 0)
+        self.duration = self.length
+        self.videoid = ytid
+        self.fresh = True
+        formats = info_dict.get('formats', [])
+        filtered_formats = [f for f in formats if f.get('format_note') != 'storyboard']
+        self.allstreams = [PafyStream(f) for f in filtered_formats]
+        self.audiostreams = [s for s in self.allstreams if s.mediatype == 'audio']
+        self.videostreams = [s for s in self.allstreams if s.mediatype != 'audio']
+        self.expiry = time.time() + 7200
+
+
+def new(ytid, callback=None):
+    logger = MyLogger(print_info=False)
+    ydl_opts = {'logger': logger}
+    # TODO: implement callback as progress_hook if provided
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info_dict = ydl.extract_info(f'https://www.youtube.com/watch?v={ytid}', download=False)
+    p = Pafy(info_dict, ytid)
+    return p
+
+
 def get_video_streams(ytid):
 
     '''
@@ -42,6 +103,7 @@ def get_video_streams(ytid):
     with yt_dlp.YoutubeDL({'logger':MyLogger()}) as ydl:
         info_dict = ydl.extract_info(ytid, download=False)
         return [i for i in info_dict['formats'] if i.get('format_note') != 'storyboard']
+
 
 def download_video(ytid, folder, audio_only=False):
 

@@ -28,7 +28,7 @@ def helptext():
 
         {2}i <number>{1} - view information on video <number>
         {2}c <number>{1} - view comments for video <number>
-        {2}d <number>{1} - download video <number>
+        {2}d <number>{1} - show download menu for video <number>
         {2}r <number>{1} - show videos related to video <number>
         {2}u <number>{1} - show videos uploaded by uploader of video <number>
         {2}x <number>{1} - copy item <number> url to clipboard. (See the note below)

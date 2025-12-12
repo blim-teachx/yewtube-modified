@@ -48,37 +48,24 @@ def get(vid, force=False, callback=None, threeD=False):
                 c.g, prfx, ss, c.w)
         return g.streams.get(ytid)['meta']
 
+    p = util.get_pafy(vid, force=force, callback=callback)
+    ps = p.allstreams if threeD else [s for s in p.allstreams if not s.threed]
 
-    #p = None#util.get_pafy(vid, force=force, callback=callback)
-    #ps = p.allstreams if threeD else [x for x in p.allstreams if not x.threed]
-    ps = pafy.get_video_streams(ytid)
+    streams = [
+        {
+            "url": s.url,
+            "ext": s.extension,
+            "quality": s.quality,
+            "resolution": s.resolution,
+            "rawbitrate": s.bitrate,
+            "mtype": 'audio' if s.vcodec == 'none' else ('video' if s.acodec == 'none' else '?'),
+            "size": s.filesize,
+            "acodec": s.acodec,
+            "vcodec": s.vcodec,
+        } for s in ps
+    ]
 
-    try:
-        # test urls are valid
-        [x['url'] for x in ps]
-
-    except TypeError:
-        # refetch if problem
-        util.dbg("%s****Type Error in get_streams. Retrying%s", c.r, c.w)
-        p = util.get_pafy(vid, force=True, callback=callback)
-        ps = p.allstreams if threeD else [x for x in p.allstreams
-                                          if not x.threed]
-
-    streams = [{"url": s['url'],
-                "ext": s['ext'],
-                "quality": s['resolution'],
-                "rawbitrate": s.get('bitrate',-1),
-                "mtype": 'audio' if 'audio' in s['resolution'] else ('video' if s['acodec'] != 'none' else '?'),
-                "size": int(s.get('filesize') if s.get('filesize') is not None else s.get('filesize_approx', -1))} for s in ps]
-
-
-    if 'manifest' in streams[0]['url']:
-        expiry = float(streams[0]['url'].split('/expire/')[1].split('/')[0])
-    else:
-        temp = streams[0]['url'].split('expire=')[1]
-        expiry = float(temp[:temp.find('&')])
-
-    g.streams[ytid] = dict(expiry=expiry, meta=streams)
+    g.streams[ytid] = dict(expiry=getattr(p, 'expiry', now + 7200), meta=streams)
     prune()
     return streams
 

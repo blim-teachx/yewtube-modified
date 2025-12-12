@@ -38,90 +38,96 @@ def download(dltype, num):
         return
 
     screen.writestatus("Fetching video info...")
-    song = (g.model[int(num) - 1])
+    song = g.model[int(num) - 1]
 
-    # best = dltype.startswith("dv") or dltype.startswith("da")
-    #
-    # if not best:
-    #
-    #     try:
-    #         # user prompt for download stream
-    #         url, ext, url_au, ext_au = prompt_dl(song)
-    #
-    #     except KeyboardInterrupt:
-    #         g.message = c.r + "Download aborted!" + c.w
-    #         g.content = content.generate_songlist_display()
-    #         return
-    #
-    #     if not url or ext_au == "abort":
-    #         # abort on invalid stream selection
-    #         g.content = content.generate_songlist_display()
-    #         g.message = "%sNo download selected / invalid input%s" % (c.y, c.w)
-    #         return
-    #
-    #     else:
-    #         # download user selected stream(s)
-    #         filename = _make_fname(song, ext)
-    #         args = (song, filename, url)
-    #
-    #         if url_au and ext_au:
-    #             # downloading video and audio stream for muxing
-    #             audio = False
-    #             filename_au = _make_fname(song, ext_au)
-    #             args_au = (song, filename_au, url_au)
-    #
-    #         else:
-    #             audio = ext in ("m4a", "ogg")
-    #
-    #         kwargs = dict(audio=audio)
-    #
-    # elif best:
-    #     # set updownload without prompt
-    #     url_au = None
-    #     av = "audio" if dltype.startswith("da") else "video"
-    #     audio = av == "audio"
-    #     filename = _make_fname(song, None, av=av)
-    #     args = (song, filename)
-    #     kwargs = dict(url=None, audio=audio)
+    best = dltype.startswith("dv") or dltype.startswith("da")
 
+    if not best:
+        try:
+            # user prompt for download stream
+            url, ext, url_au, ext_au = prompt_dl(song)
+
+        except KeyboardInterrupt:
+            g.message = c.r + "Download aborted!" + c.w
+            g.content = content.generate_songlist_display()
+            return
+
+        if not url or ext_au == "abort":
+            # abort on invalid stream selection
+            g.content = content.generate_songlist_display()
+            g.message = "%sNo download selected / invalid input%s" % (c.y, c.w)
+            return
+
+        else:
+            # download user selected stream(s)
+            filename = _make_fname(song, ext)
+            args = (song, filename, url)
+
+            if url_au and ext_au:
+                # downloading video and audio stream for muxing
+                audio = False
+                filename_au = _make_fname(song, ext_au)
+                args_au = (song, filename_au, url_au)
+
+            else:
+                audio = ext in ("m4a", "ogg")
+
+            kwargs = dict(audio=audio)
+
+    else:
+        # set up download without prompt
+        url_au = None
+        av = "audio" if dltype.startswith("da") else "video"
+        audio = av == "audio"
+        filename = _make_fname(song, None, av=av)
+        args = (song, filename)
+        kwargs = dict(url=None, audio=audio)
+
+    dl_filenames = [args[1]]
     try:
-        # perform download(s)
-        # dl_filenames = [args[1]]
-        # f = _download(*args, **kwargs)
-        success = pafy.download_video(song.ytid, config.DDIR.get, True if dltype.startswith("da") else False)
-        if success:
-            g.message = "Saved \'" + song.title + "\' to " + c.g + config.DDIR.get + c.w
+        f = _download(*args, **kwargs)
+        if f:
+            g.message = "Saved '" + song.title + "' to " + c.g + filename + c.w
 
-        # if url_au:
-        #     dl_filenames += [args_au[1]]
-        #     _download(*args_au, allow_transcode=False, **kwargs)
+        if url_au and ext_au:
+            dl_filenames.append(args_au[1])
+            _download(*args_au, allow_transcode=False, audio=False)
 
     except KeyboardInterrupt:
         g.message = c.r + "Download halted!" + c.w
 
-        # try:
-        #     for downloaded in dl_filenames:
-        #         os.remove(downloaded)
-        #
-        # except IOError:
-        #     pass
+        try:
+            for downloaded in dl_filenames:
+                if os.path.exists(downloaded):
+                    os.remove(downloaded)
 
-    # if url_au:
-    #     # multiplex
-    #     name, ext = os.path.splitext(args[1])
-    #     tmpvideoname = name + '.' +str(random.randint(10000, 99999)) + ext
-    #     os.rename(args[1], tmpvideoname)
-    #     mux_cmd = [g.muxapp, "-i", tmpvideoname, "-i", args_au[1], "-c",
-    #                "copy", name + ".mp4"]
-    #
-    #     try:
-    #         subprocess.call(mux_cmd)
-    #         g.message = "Saved to :" + c.g + mux_cmd[7] + c.w
-    #         os.remove(tmpvideoname)
-    #         os.remove(args_au[1])
-    #
-    #     except KeyboardInterrupt:
-    #         g.message = "Audio/Video multiplex aborted!"
+        except IOError:
+            pass
+        g.content = content.generate_songlist_display()
+        return
+
+    if url_au and ext_au:
+        # multiplex
+        name, ext = os.path.splitext(args[1])
+        tmpvideoname = name + '.' + str(random.randint(10000, 99999)) + ext
+        os.rename(args[1], tmpvideoname)
+        mux_cmd = [g.muxapp, "-i", tmpvideoname, "-i", args_au[1], "-c",
+                   "copy", name + ".mp4"]
+
+        try:
+            subprocess.call(mux_cmd)
+            g.message = "Saved to :" + c.g + (name + ".mp4") + c.w
+            os.remove(tmpvideoname)
+            os.remove(args_au[1])
+
+        except KeyboardInterrupt:
+            g.message = "Audio/Video multiplex aborted!"
+            # clean up?
+            if os.path.exists(tmpvideoname):
+                os.rename(tmpvideoname, args[1])  # restore video
+
+    else:
+        g.message = "Saved '" + song.title + "' to " + c.g + filename + c.w
 
     g.content = content.generate_songlist_display()
 

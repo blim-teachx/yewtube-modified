@@ -12,6 +12,7 @@ import unicodedata
 import urllib
 from datetime import datetime, timezone
 from importlib import import_module
+from . import pafy
 
 from . import c, description_parser, g, terminalsize
 from .playlist import Video
@@ -217,19 +218,33 @@ def get_pafy(item, force=False, callback=None):
     else:
 
         try:
-            p = None#pafy.new(ytid, callback=callback_fn)
-
-        except IOError as e:
-
-            if "pafy" in str(e):
-                dbg(c.p + "retrying failed pafy get: " + ytid + c.w)
-                p = None#pafy.new(ytid, callback=callback)
-
-            else:
-                raise
+            p = pafy.new(ytid, callback=callback_fn)
+        except Exception as e:
+            dbg("error in pafy.new: %s" % e)
+            dbg(c.p + "retrying failed pafy get: " + ytid + c.w)
+            p = pafy.new(ytid, callback=None)
+        except Exception:  # second fail
+            raise
 
         g.pafs[ytid] = p
         p.fresh = True
+
+        # Update expiry from stream URL if possible
+        if p.allstreams:
+            url = p.allstreams[0].url
+            try:
+                if 'expire=' in url:
+                    start = url.index('expire=') + 7
+                    end = url.find('&', start) if start < len(url) and '&' in url[start:] else len(url)
+                    exp_str = url[start:end]
+                    p.expiry = float(exp_str)
+                elif '/expire/' in url:
+                    parts = url.split('/expire/')
+                    if len(parts) > 1:
+                        exp_str = parts[1].split('/')[0].split('?')[0]
+                        p.expiry = float(exp_str)
+            except (ValueError, IndexError, AttributeError):
+                pass
         thread = "preload: " if not callback else ""
         dbg("%s%sgot new pafy object: %s%s" % (c.y, thread, p.title[:26], c.w))
         dbg("%s%sgot new pafy object: %s%s" % (c.y, thread, p.videoid, c.w))
