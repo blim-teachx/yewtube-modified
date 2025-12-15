@@ -40,88 +40,93 @@ def download(dltype, num):
     screen.writestatus("Fetching video info...")
     song = (g.model[int(num) - 1])
 
-    # best = dltype.startswith("dv") or dltype.startswith("da")
-    #
-    # if not best:
-    #
-    #     try:
-    #         # user prompt for download stream
-    #         url, ext, url_au, ext_au = prompt_dl(song)
-    #
-    #     except KeyboardInterrupt:
-    #         g.message = c.r + "Download aborted!" + c.w
-    #         g.content = content.generate_songlist_display()
-    #         return
-    #
-    #     if not url or ext_au == "abort":
-    #         # abort on invalid stream selection
-    #         g.content = content.generate_songlist_display()
-    #         g.message = "%sNo download selected / invalid input%s" % (c.y, c.w)
-    #         return
-    #
-    #     else:
-    #         # download user selected stream(s)
-    #         filename = _make_fname(song, ext)
-    #         args = (song, filename, url)
-    #
-    #         if url_au and ext_au:
-    #             # downloading video and audio stream for muxing
-    #             audio = False
-    #             filename_au = _make_fname(song, ext_au)
-    #             args_au = (song, filename_au, url_au)
-    #
-    #         else:
-    #             audio = ext in ("m4a", "ogg")
-    #
-    #         kwargs = dict(audio=audio)
-    #
-    # elif best:
-    #     # set updownload without prompt
-    #     url_au = None
-    #     av = "audio" if dltype.startswith("da") else "video"
-    #     audio = av == "audio"
-    #     filename = _make_fname(song, None, av=av)
-    #     args = (song, filename)
-    #     kwargs = dict(url=None, audio=audio)
+    best = dltype.startswith("dv") or dltype.startswith("da")
+
+    if not best:
+
+        try:
+            # user prompt for download stream
+            url, ext, url_au, ext_au = prompt_dl(song)
+
+        except KeyboardInterrupt:
+            g.message = c.r + "Download aborted!" + c.w
+            g.content = content.generate_songlist_display()
+            return
+
+        if not url or ext_au == "abort":
+            # abort on invalid stream selection
+            g.content = content.generate_songlist_display()
+            g.message = "%sNo download selected / invalid input%s" % (c.y, c.w)
+            return
+
+        else:
+            # download user selected stream(s)
+            filename = _make_fname(song, ext)
+            args = (song, filename, url)
+
+            if url_au and ext_au:
+                # downloading video and audio stream for muxing
+                audio = False
+                filename_au = _make_fname(song, ext_au)
+                args_au = (song, filename_au, url_au)
+
+            else:
+                audio = ext in ("m4a", "ogg")
+
+            kwargs = dict(audio=audio)
+
+    elif best:
+        # set updownload without prompt
+        url_au = None
+        av = "audio" if dltype.startswith("da") else "video"
+        audio = av == "audio"
+        filename = _make_fname(song, None, av=av)
+        args = (song, filename)
+        kwargs = dict(url=None, audio=audio)
 
     try:
         # perform download(s)
-        # dl_filenames = [args[1]]
-        # f = _download(*args, **kwargs)
-        success = pafy.download_video(song.ytid, config.DDIR.get, True if dltype.startswith("da") else False)
-        if success:
-            g.message = "Saved \'" + song.title + "\' to " + c.g + config.DDIR.get + c.w
+        dl_filenames = [args[1]]
 
-        # if url_au:
-        #     dl_filenames += [args_au[1]]
-        #     _download(*args_au, allow_transcode=False, **kwargs)
+        if best:
+             success = pafy.download_video(song.ytid, config.DDIR.get, True if dltype.startswith("da") else False)
+             if success:
+                 g.message = "Saved \'" + song.title + "\' to " + c.g + config.DDIR.get + c.w
+        else:
+             _download(*args, **kwargs)
+             g.message = "Saved \'" + song.title + "\' to " + c.g + config.DDIR.get + c.w
+
+        if not best and url_au:
+             dl_filenames += [args_au[1]]
+             _download(*args_au, allow_transcode=False, **kwargs)
 
     except KeyboardInterrupt:
         g.message = c.r + "Download halted!" + c.w
 
-        # try:
-        #     for downloaded in dl_filenames:
-        #         os.remove(downloaded)
-        #
-        # except IOError:
-        #     pass
+        try:
+            for downloaded in dl_filenames:
+                if not best:
+                     os.remove(downloaded)
 
-    # if url_au:
-    #     # multiplex
-    #     name, ext = os.path.splitext(args[1])
-    #     tmpvideoname = name + '.' +str(random.randint(10000, 99999)) + ext
-    #     os.rename(args[1], tmpvideoname)
-    #     mux_cmd = [g.muxapp, "-i", tmpvideoname, "-i", args_au[1], "-c",
-    #                "copy", name + ".mp4"]
-    #
-    #     try:
-    #         subprocess.call(mux_cmd)
-    #         g.message = "Saved to :" + c.g + mux_cmd[7] + c.w
-    #         os.remove(tmpvideoname)
-    #         os.remove(args_au[1])
-    #
-    #     except KeyboardInterrupt:
-    #         g.message = "Audio/Video multiplex aborted!"
+        except IOError:
+            pass
+
+    if not best and url_au:
+        # multiplex
+        name, ext = os.path.splitext(args[1])
+        tmpvideoname = name + '.' +str(random.randint(10000, 99999)) + ext
+        os.rename(args[1], tmpvideoname)
+        mux_cmd = [g.muxapp, "-i", tmpvideoname, "-i", args_au[1], "-c",
+                   "copy", name + ".mp4"]
+
+        try:
+            subprocess.call(mux_cmd)
+            g.message = "Saved to :" + c.g + mux_cmd[7] + c.w
+            os.remove(tmpvideoname)
+            os.remove(args_au[1])
+
+        except KeyboardInterrupt:
+            g.message = "Audio/Video multiplex aborted!"
 
     g.content = content.generate_songlist_display()
 
@@ -506,34 +511,71 @@ def get_dl_data(song, mediatype="any"):
     """ Get filesize and metadata for all streams, return dict. """
     def mbsize(x):
         """ Return size in MB. """
+        if not x: return "0"
         return str(int(x / (1024 ** 2)))
 
-    p = util.get_pafy(song)
+    # p = util.get_pafy(song)
+    ytid = song.ytid
+    streams = pafy.get_video_streams(ytid)
+    info = pafy.get_video_info(ytid)
+
+    class Info:
+        pass
+    p = Info()
+    if isinstance(info.get('channel'), dict):
+        p.author = info['channel'].get('name', 'Unknown')
+    else:
+        p.author = str(info.get('channel', 'Unknown'))
+
     dldata = []
     text = " [Fetching stream info] >"
-    streamlist = [x for x in p.allstreams]
-
-    if mediatype == "audio":
-        streamlist = [x for x in p.audiostreams]
+    
+    streamlist = []
+    for s in streams:
+        vcodec = s.get('vcodec', 'none')
+        acodec = s.get('acodec', 'none')
+        
+        if vcodec == 'none' and acodec != 'none':
+            mtype = 'audio'
+        elif vcodec != 'none' and acodec == 'none':
+            mtype = 'video'
+        else:
+            mtype = 'normal'
+        
+        s['mediatype'] = mtype
+        
+        if mediatype == 'audio':
+            if mtype == 'audio':
+                streamlist.append(s)
+        elif mediatype == 'video':
+            if mtype == 'video':
+                streamlist.append(s)
+        else:
+            streamlist.append(s)
 
     l = len(streamlist)
     for n, stream in enumerate(streamlist):
         sys.stdout.write(text + "-" * n + ">" + " " * (l - n - 1) + "<\r")
         sys.stdout.flush()
 
-        try:
-            size = mbsize(stream.get_filesize())
+        size_val = stream.get('filesize') or stream.get('filesize_approx') or 0
+        size = mbsize(size_val)
+        
+        quality = stream.get('quality')
+        if not quality:
+             if stream['mediatype'] == 'audio':
+                 quality = str(int(stream.get('abr', 0) or 0)) + 'k'
+             else:
+                 quality = stream.get('resolution', 'N/A')
+                 
+        note = stream.get('format_note', '')
 
-        except TypeError:
-            util.dbg(c.r + "---Error getting stream size" + c.w)
-            size = 0
-
-        item = {'mediatype': stream.mediatype,
+        item = {'mediatype': stream['mediatype'],
                 'size': size,
-                'ext': stream.extension,
-                'quality': stream.quality,
-                'notes': stream.notes,
-                'url': stream.url}
+                'ext': stream['ext'],
+                'quality': str(quality),
+                'notes': note,
+                'url': stream['url']}
 
         dldata.append(item)
 
